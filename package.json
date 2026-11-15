@@ -1,0 +1,13 @@
+{
+  "name": "@civ-clone/base-unit-fuel",
+  "version": "0.0.0",
+  "description": "Fuel for units that must return to base: a range, the turns a unit has spent out, the places it refuels, and running out of fuel.",
+  "repository": "git@github.com:civ-clone/base-unit-fuel.git",
+  "keywords": [
+    "typescript",
+    "civilization"
+  ],
+  "author": "dom111 <dom111@users.noreply.github.com>",
+  "license": "MIT",
+  "private": false
+}
