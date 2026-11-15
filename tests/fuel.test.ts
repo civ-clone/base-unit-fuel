@@ -47,7 +47,7 @@ const setUp = () => {
     unitImprovementRegistry = new UnitImprovementRegistry(),
     tileImprovementRegistry = new TileImprovementRegistry(),
     transportRegistry = new TransportRegistry(),
-    world = new World(new Generator(10, 1)),
+    world = new World(new Generator(1, 10)),
     tiles = Array.from(
       { length: 10 },
       (_, x: number): Tile => new Tile(x, 0, new Terrain(), world)
