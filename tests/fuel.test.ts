@@ -1,5 +1,5 @@
 import { OutOfFuel, Refuel } from '../lib/Rules';
-import fuelRules, { refuels, turnsAloft } from '../lib/fuelRules';
+import fuelRules, { CountOn, refuels, turnsAloft } from '../lib/fuelRules';
 import { fuelState, refuelInReach } from '../lib/reach';
 import {
   refuelAboard,
@@ -7,6 +7,7 @@ import {
   refuelInStackWith,
   refuelOnTileImprovement,
 } from '../lib/refuel';
+import Action from '@civ-clone/core-unit/Action';
 import Aloft from '../lib/Aloft';
 import City from '@civ-clone/core-city/City';
 import CityRegistry from '@civ-clone/core-city/CityRegistry';
@@ -16,6 +17,7 @@ import Effect from '@civ-clone/core-rule/Effect';
 import Fuel from '../lib/Fuel';
 import Generator from '@civ-clone/core-world-generator/Generator';
 import { Movement } from '@civ-clone/core-unit/Yields';
+import Moved from '@civ-clone/core-unit/Rules/Moved';
 import Player from '@civ-clone/core-player/Player';
 import RuleRegistry from '@civ-clone/core-rule/RuleRegistry';
 import Terrain from '@civ-clone/core-terrain/Terrain';
@@ -40,7 +42,9 @@ import { expect } from 'chai';
 
 class Airfield extends TileImprovement {}
 
-const setUp = () => {
+class Step extends Action {}
+
+const setUp = (countOn: CountOn = 'turn-end') => {
   const ruleRegistry = new RuleRegistry(),
     unitRegistry = new UnitRegistry(),
     cityRegistry = new CityRegistry(),
@@ -103,19 +107,41 @@ const setUp = () => {
     ),
     ...fuelRules(
       { ruleRegistry, unitImprovementRegistry, unitRegistry },
-      { prefix: 'test' }
+      { prefix: 'test', countOn }
     ),
     refuelInOwnCity(cityRegistry),
     refuelOnTileImprovement(Airfield, tileImprovementRegistry)
   );
 
   const endTurn = (forPlayer: Player = player): void =>
-    ruleRegistry.process(TurnEnd, forPlayer);
+      ruleRegistry.process(TurnEnd, forPlayer),
+    // Moves `moving` to `to` (or attacks `to`, staying where it is), leaving it `movesLeft`, as a move action does
+    //  before processing `Moved`.
+    move = (
+      moving: Unit,
+      to: Tile,
+      movesLeft: number,
+      attack: boolean = false
+    ): void => {
+      const from = moving.tile();
+
+      if (!attack) {
+        moving.setTile(to);
+      }
+
+      moving.moves().set(movesLeft);
+      ruleRegistry.process(
+        Moved,
+        moving,
+        new Step(from, to, moving, ruleRegistry)
+      );
+    };
 
   return {
     city,
     endTurn,
     events,
+    move,
     player,
     ruleRegistry,
     tileImprovementRegistry,
@@ -337,5 +363,98 @@ describe('reach', (): void => {
     expect(
       refuelInReach(ruleRegistry, unitImprovementRegistry, out, options)
     ).to.equal(tiles[9]);
+  });
+});
+
+describe('fuelRules, counting when a unit runs out of moves (`unit_move_dir_air_fuel`)', (): void => {
+  it('should count a turn out only when a move leaves the unit with no moves, and not at the end of the turn', (): void => {
+    const { endTurn, events, move, tiles, unit, unitImprovementRegistry } =
+        setUp('out-of-moves'),
+      out = unit(tiles[0], 2);
+
+    move(out, tiles[1], 5);
+    endTurn();
+
+    // Moves left, and no count at the end of the turn: the original's rule.
+    expect(turnsAloft(unitImprovementRegistry, out)).to.equal(0);
+
+    move(out, tiles[2], 0);
+
+    expect(turnsAloft(unitImprovementRegistry, out)).to.equal(1);
+    expect(events).to.deep.equal([]);
+
+    move(out, tiles[3], 0);
+
+    expect(events).to.deep.equal([
+      ['out-of-fuel', out],
+      ['destroyed', out],
+    ]);
+  });
+
+  it('should lose a range-1 unit as soon as it runs out of moves away from a refuelling point', (): void => {
+    const { events, move, tiles, unit } = setUp('out-of-moves'),
+      out = unit(tiles[0], 1);
+
+    move(out, tiles[1], 0);
+
+    expect(events[0]).to.deep.equal(['out-of-fuel', out]);
+  });
+
+  it('should land where it refuels: the count goes, and so do its moves', (): void => {
+    const { city, move, tiles, unit, unitImprovementRegistry } =
+        setUp('out-of-moves'),
+      out = unit(tiles[2], 2);
+
+    city(tiles[0]);
+    move(out, tiles[3], 0);
+
+    expect(turnsAloft(unitImprovementRegistry, out)).to.equal(1);
+
+    move(out, tiles[0], 4);
+
+    expect(turnsAloft(unitImprovementRegistry, out)).to.equal(0);
+    expect(out.moves().value()).to.equal(0);
+  });
+
+  it('should not land a range-1 unit that attacked with moves to spare, but land one that attacked with none', (): void => {
+    const { city, events, move, tiles, unit } = setUp('out-of-moves'),
+      fresh = unit(tiles[0], 1),
+      spent = unit(tiles[0], 1),
+      longer = unit(tiles[0], 2);
+
+    city(tiles[0]);
+
+    // Attacking the next square from its city, staying there.
+    move(fresh, tiles[1], 4, true);
+    move(longer, tiles[1], 4, true);
+
+    expect(fresh.moves().value()).to.equal(4);
+    expect(longer.moves().value()).to.equal(0);
+
+    move(spent, tiles[1], 0, true);
+
+    expect(spent.moves().value()).to.equal(0);
+    expect(events).to.deep.equal([]);
+  });
+
+  it('should ignore an action on its own square, and units with no range', (): void => {
+    const { events, move, tiles, unit, unitImprovementRegistry } =
+        setUp('out-of-moves'),
+      out = unit(tiles[3], 1),
+      grounded = unit(tiles[3]);
+
+    move(out, tiles[3], 0);
+    move(grounded, tiles[4], 0);
+
+    expect(events).to.deep.equal([]);
+    expect(unitImprovementRegistry.getByUnit(grounded)).to.deep.equal([]);
+  });
+
+  it('should name its counting rule for moves', (): void => {
+    expect(
+      fuelRules({}, { prefix: 'test', countOn: 'out-of-moves' }).map((rule) =>
+        rule.id()
+      )
+    ).to.deep.equal(['test:unit/moved/fuel', 'test:unit/out-of-fuel/destroy']);
   });
 });
