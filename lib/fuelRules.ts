@@ -14,6 +14,8 @@ import {
 import Action from '@civ-clone/core-unit/Action';
 import Aloft from './Aloft';
 import Criterion from '@civ-clone/core-rule/Criterion';
+import Engine from '@civ-clone/core-engine/Engine';
+import High from '@civ-clone/core-rule/Priorities/High';
 import Effect from '@civ-clone/core-rule/Effect';
 import Fuel from './Fuel';
 import Moved from '@civ-clone/core-unit/Rules/Moved';
@@ -24,6 +26,8 @@ import Unit from '@civ-clone/core-unit/Unit';
 import UnitImprovement from '@civ-clone/core-unit-improvement/UnitImprovement';
 
 export interface FuelDependencies {
+  /** When given, the client is told when a unit runs out of fuel: `unit:out-of-fuel`, with the unit. */
+  engine?: Engine;
   ruleRegistry?: RuleRegistry;
   unitImprovementRegistry?: UnitImprovementRegistry;
   unitRegistry?: UnitRegistry;
@@ -218,13 +222,17 @@ export const checkFuelAfterMove =
 /**
  * A ruleset's fuel rules: one that counts the turns each unit with a range spends away from a refuelling point, and an
  *  `OutOfFuel` rule that destroys a unit that runs out. A game adds its own `Refuel` rules (see `lib/refuel`), and its
- *  own `OutOfFuel` rules for anything else that should happen (a notice, say).
+ *  own `OutOfFuel` rules for anything else that should happen.
+ *
+ * Given an `engine`, it also emits `unit:out-of-fuel` with the unit, before the unit is destroyed (so it's still on its
+ *  square), for the client's notice.
  *
  * With `countOn: 'turn-end'` (the default) the count is a `TurnEnd` rule (`checkFuel`): it doesn't matter whether a
  *  unit spent its moves. With `'out-of-moves'` it is a `Moved` rule (`checkFuelAfterMove`), as the original counts it.
  */
 export const fuelRules = (
   {
+    engine,
     ruleRegistry = ruleRegistryInstance,
     unitImprovementRegistry = unitImprovementRegistryInstance,
     unitRegistry = unitRegistryInstance,
@@ -267,6 +275,17 @@ export const fuelRules = (
             )
           )
         ),
+    ...(engine === undefined
+      ? []
+      : [
+          new OutOfFuel(
+            ...id('unit/out-of-fuel/emit'),
+            new High(),
+            new Effect((unit: Unit): void => {
+              engine.emit('unit:out-of-fuel', unit);
+            })
+          ),
+        ]),
     new OutOfFuel(
       ...id('unit/out-of-fuel/destroy'),
       new Effect((unit: Unit): void => unit.destroy())

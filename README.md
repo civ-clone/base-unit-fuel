@@ -10,14 +10,16 @@ Deep-import the modules; there is no index.
 - `lib/Fuel`: `Fuel`, the unit yield that gives a unit's range: how many of its player's turns it can end away from a
   refuelling point, counting the one it set out in (1: it must refuel every turn; 2: it can stay out one turn). 0, as
   with no `Yield` rule for it, needs no fuel.
-- `lib/fuelRules`: `fuelRules({ ruleRegistry, unitImprovementRegistry, unitRegistry }, { prefix?, range?, countOn?,
+- `lib/fuelRules`: `fuelRules({ engine?, ruleRegistry, unitImprovementRegistry, unitRegistry }, { prefix?, range?, countOn?,
   countsAsMove?, isAttack? })`:
   - a rule that counts turns out, as `countOn` says (see below);
-  - an `OutOfFuel` rule that destroys the unit. A game adds its own `OutOfFuel` rules for anything else (a notice).
+  - an `OutOfFuel` rule that destroys the unit. A game adds its own `OutOfFuel` rules for anything else;
+  - given an `engine`, a `High` `OutOfFuel` rule that emits `unit:out-of-fuel` with the unit, before it is destroyed, so
+    the client can say the unit ran out of fuel (not that it was lost at sea).
   - `range(unit)` is the unit's `Fuel` yield by default (`fuelRange`); a game can read its own table instead.
   - helpers: `refuels(ruleRegistry, unit, tile?)`, `turnsAloft(unitImprovementRegistry, unit)`, `aloftOf(...)`,
     `checkFuel(...)` and `checkFuelAfterMove(...)`.
-  - Rule ids `<prefix>:player/turn-end/fuel` (or `<prefix>:unit/moved/fuel`) and `<prefix>:unit/out-of-fuel/destroy`.
+  - Rule ids `<prefix>:player/turn-end/fuel` (or `<prefix>:unit/moved/fuel`) and `<prefix>:unit/out-of-fuel/destroy`, plus `<prefix>:unit/out-of-fuel/emit` with an engine.
 - `lib/Rules`: `Refuel(unit, tile) → boolean` (a unit refuels on a square if any rule's criteria match and its effect
   answers `true`) and `OutOfFuel(unit)`.
 - `lib/refuel`, `Refuel` rules a game registers, each with an optional `applies(unit)` filter and id:

@@ -14,6 +14,7 @@ import CityRegistry from '@civ-clone/core-city/CityRegistry';
 import Criterion from '@civ-clone/core-rule/Criterion';
 import Destroyed from '@civ-clone/core-unit/Rules/Destroyed';
 import Effect from '@civ-clone/core-rule/Effect';
+import Engine from '@civ-clone/core-engine/Engine';
 import Fuel from '../lib/Fuel';
 import Generator from '@civ-clone/core-world-generator/Generator';
 import { Movement } from '@civ-clone/core-unit/Yields';
@@ -44,7 +45,7 @@ class Airfield extends TileImprovement {}
 
 class Step extends Action {}
 
-const setUp = (countOn: CountOn = 'turn-end') => {
+const setUp = (countOn: CountOn = 'turn-end', engine?: Engine) => {
   const ruleRegistry = new RuleRegistry(),
     unitRegistry = new UnitRegistry(),
     cityRegistry = new CityRegistry(),
@@ -106,7 +107,7 @@ const setUp = (countOn: CountOn = 'turn-end') => {
       })
     ),
     ...fuelRules(
-      { ruleRegistry, unitImprovementRegistry, unitRegistry },
+      { engine, ruleRegistry, unitImprovementRegistry, unitRegistry },
       { prefix: 'test', countOn }
     ),
     refuelInOwnCity(cityRegistry),
@@ -244,6 +245,36 @@ describe('fuelRules', (): void => {
     expect(aloft).to.be.instanceOf(Aloft);
     expect(aloft.turns()).to.equal(2);
     expect(Object.keys(out)).not.to.include('_turns');
+  });
+
+  it('should tell the client, given an engine, before the unit is destroyed', (): void => {
+    const emitted: [string, Unit, Tile | null][] = [],
+      engine = {
+        emit: (event: string, unit: Unit): void => {
+          emitted.push([event, unit, unit.destroyed() ? null : unit.tile()]);
+        },
+      } as unknown as Engine,
+      { endTurn, events, tiles, unit } = setUp('turn-end', engine),
+      out = unit(tiles[3], 1);
+
+    endTurn();
+
+    expect(emitted).to.deep.equal([['unit:out-of-fuel', out, tiles[3]]]);
+    expect(events).to.deep.equal([
+      ['out-of-fuel', out],
+      ['destroyed', out],
+    ]);
+  });
+
+  it('should emit nothing without an engine', (): void => {
+    const { ruleRegistry } = setUp();
+
+    expect(
+      ruleRegistry
+        .get(OutOfFuel)
+        .map((rule) => rule.id())
+        .filter((id) => (id ?? '').endsWith('/emit'))
+    ).to.deep.equal([]);
   });
 
   it('should name its rules with the prefix', (): void => {
