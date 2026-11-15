@@ -4,12 +4,15 @@ import { UnitImprovementRegistry } from '@civ-clone/core-unit-improvement/UnitIm
 import { UnitRegistry } from '@civ-clone/core-unit/UnitRegistry';
 import Action from '@civ-clone/core-unit/Action';
 import Aloft from './Aloft';
+import Engine from '@civ-clone/core-engine/Engine';
 import Moved from '@civ-clone/core-unit/Rules/Moved';
 import Player from '@civ-clone/core-player/Player';
 import Tile from '@civ-clone/core-world/Tile';
 import TurnEnd from '@civ-clone/core-player/Rules/TurnEnd';
 import Unit from '@civ-clone/core-unit/Unit';
 export interface FuelDependencies {
+  /** When given, the client is told when a unit runs out of fuel: `unit:out-of-fuel`, with the unit. */
+  engine?: Engine;
   ruleRegistry?: RuleRegistry;
   unitImprovementRegistry?: UnitImprovementRegistry;
   unitRegistry?: UnitRegistry;
@@ -83,13 +86,21 @@ export declare const checkFuelAfterMove: (
 /**
  * A ruleset's fuel rules: one that counts the turns each unit with a range spends away from a refuelling point, and an
  *  `OutOfFuel` rule that destroys a unit that runs out. A game adds its own `Refuel` rules (see `lib/refuel`), and its
- *  own `OutOfFuel` rules for anything else that should happen (a notice, say).
+ *  own `OutOfFuel` rules for anything else that should happen.
+ *
+ * Given an `engine`, it also emits `unit:out-of-fuel` with the unit, before the unit is destroyed (so it's still on its
+ *  square), for the client's notice.
  *
  * With `countOn: 'turn-end'` (the default) the count is a `TurnEnd` rule (`checkFuel`): it doesn't matter whether a
  *  unit spent its moves. With `'out-of-moves'` it is a `Moved` rule (`checkFuelAfterMove`), as the original counts it.
  */
 export declare const fuelRules: (
-  { ruleRegistry, unitImprovementRegistry, unitRegistry }: FuelDependencies,
+  {
+    engine,
+    ruleRegistry,
+    unitImprovementRegistry,
+    unitRegistry,
+  }: FuelDependencies,
   { prefix, range, countOn, countsAsMove, isAttack }?: FuelOptions
 ) => (TurnEnd | Moved | OutOfFuel)[];
 export default fuelRules;
